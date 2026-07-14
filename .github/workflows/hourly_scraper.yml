@@ -1,0 +1,51 @@
+name: Hourly Stream Scraper
+
+on:
+  schedule:
+    # Runs exactly at minute 0 of every hour
+    - cron: '0 * * * *'
+  workflow_dispatch: # Allows you to manually trigger it from the GitHub Actions tab
+
+jobs:
+  scrape-and-update:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # Needed so the workflow can save and push the files back to your repo
+
+    steps:
+    - name: Check out repository code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-python: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Install Playwright Chromium Browser
+      run: |
+        playwright install chromium --with-deps
+
+    - name: Run Scraper Engine
+      run: |
+        python scraper.py
+
+    - name: Commit and Push Updated Streams
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        
+        # Check if live_streams.txt was generated/modified
+        if [ -f "live_streams.txt" ]; then
+          git add live_streams.txt
+          # Only commit if changes exist to avoid empty commit pipeline loops
+          git diff-index --quiet HEAD || git commit -m "Automated Sync: Updated live stream links [skip ci]"
+          git push
+        else
+          echo "No files modified."
+        fi
