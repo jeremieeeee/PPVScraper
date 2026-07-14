@@ -1,35 +1,49 @@
 import time
-import re
 from playwright.sync_api import sync_playwright
 
 def run():
-    found_links = set()
+    playlist_entries = []
     target_url = "https://roxiestreams.info/"
-    target_keywords = ["soccer", "mlb", "nba", "nfl", "nhl", "fighting", "motorsports", "wwe", "streams", "multiview"]
-    m3u8_regex = re.compile(r'(https?://[^\s"\',\?<>#]+\.m3u8[^\s"\',<>]*)', re.IGNORECASE)
+    target_keywords = ["soccer", "mlb", "nba", "nfl", "nhl", "fighting", "motorsports", "wwe", "streams", "multiview", "aew"]
+
+    # Your explicit mapping dictionary matching page paths directly to the underlying CDN channels
+    stream_map = {
+        "/mlb-streams-1": [
+            "https://tedesco.uniteesports.com/mlb.m3u8",
+            "https://tedesco.formaturamaxi.com.br/mlb.m3u8"
+        ],
+        "/nba-streams-1": [
+            "https://tedesco.uniteesports.com/nba.m3u8"
+        ],
+        "/nba-streams-2": [
+            "https://tedesco.formaturamaxi.com.br/nba2.m3u8"
+        ],
+        "/wwe-streams": [
+            "https://admin2.formaturamaxi.com.br/wwe.m3u8"
+        ],
+        "/aew": [
+            "https://tedesco.formaturamaxi.com.br/aew.m3u8"
+        ],
+        # Predictive patterns for remaining categories based on your template configurations
+        "/soccer-streams-1": ["https://tedesco.uniteesports.com/soccer.m3u8"],
+        "/soccer-streams-2": ["https://tedesco.formaturamaxi.com.br/soccer2.m3u8"],
+        "/nfl-streams-1": ["https://tedesco.uniteesports.com/nfl.m3u8"],
+        "/nhl-streams-1": ["https://tedesco.uniteesports.com/nhl.m3u8"],
+    }
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={"width": 1280, "height": 720}
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         page = context.new_page()
 
-        def check_url(url):
-            if ".m3u8" in url and url not in found_links:
-                print(f"[FOUND VIA NETWORK] -> {url}")
-                found_links.add(url)
-
-        page.on("request", lambda request: check_url(request.url))
-        page.on("response", lambda response: check_url(response.url))
-
         try:
-            print(f"Navigating to homepage: {target_url}...")
-            page.goto(target_url, wait_until="networkidle", timeout=60000)
-            time.sleep(5)
+            print(f"Navigating to homepage index: {target_url}...")
+            page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
+            time.sleep(3)
 
-            # --- TIER 1: FIND CATEGORY TABS ---
+            # Gather category navigation links present on the root domain
             all_anchors = page.locator("a").all()
             category_urls = set()
 
@@ -48,94 +62,72 @@ def run():
                     continue
 
             sorted_categories = sorted(list(category_urls))
-            print(f"Found {len(sorted_categories)} category tabs to scan.")
+            print(f"Discovered {len(sorted_categories)} valid tabs to search.")
 
-            # --- TIER 2: VISIT TABS TO HARVEST MATCH LINKS ---
-            match_urls = set()
+            # Scan tabs for active references
+            active_paths = set()
             for cat_path in sorted_categories:
                 try:
-                    page.goto(cat_path, wait_until="load", timeout=30000)
-                    time.sleep(3)
+                    print(f"Inspecting active items on tab: {cat_path}")
+                    page.goto(cat_path, wait_until="domcontentloaded", timeout=30000)
+                    time.sleep(2)
+                    
                     sub_anchors = page.locator("a").all()
                     for sub_a in sub_anchors:
                         s_href = sub_a.get_attribute("href")
                         if s_href and not any(b in s_href for b in [".cc", "guns.lol"]):
-                            if "stream" in s_href.lower() or "-" in s_href:
-                                match_url = f"{target_url.rstrip('/')}{s_href}" if s_href.startswith("/") else s_href
-                                if "roxiestreams.info" in match_url:
-                                    match_urls.add(match_url)
+                            if any(k in s_href.lower() for k in target_keywords) or s_href.startswith("/"):
+                                path_only = s_href if s_href.startswith("/") else f"/{s_href.split('roxiestreams.info/')[-1]}"
+                                if path_only != "/" and len(path_only) > 2:
+                                    active_paths.add(path_only)
                 except Exception:
                     continue
 
-            final_stream_targets = sorted(list(match_urls))
-            print(f"Deep crawl extracted {len(final_stream_targets)} individual stream paths.")
+            print(f"Verified active paths running on site layout right now: {list(active_paths)}")
 
-            # --- TIER 3: LOAD STREAM PAGES, CHECK DOM ATTRIBUTES & SCRIPTS ---
-            for idx, stream_target in enumerate(final_stream_targets[:25]):
-                print(f"[{idx+1}/{len(final_stream_targets[:25])}] Deep element check at: {stream_target}")
-                try:
-                    page.goto(stream_target, wait_until="load", timeout=30000)
-                    time.sleep(7) # Give scripts and frames time to mount
-
-                    # 1. Harvest from HTML source code
-                    main_html = page.content()
-                    for match in m3u8_regex.findall(main_html):
-                        clean_url = match.replace('\\', '')
-                        if clean_url not in found_links:
-                            print(f"[FOUND IN HTML] -> {clean_url}")
-                            found_links.add(clean_url)
-
-                    # 2. Harvest specific element attributes (src, data-src, data-url) across the DOM
-                    for element in page.locator("iframe, source, video, div, object, embed").all():
-                        for attr in ["src", "data-src", "data-url", "value"]:
-                            try:
-                                val = element.get_attribute(attr)
-                                if val and ".m3u8" in val:
-                                    clean_val = val.replace('\\', '')
-                                    if clean_val not in found_links:
-                                        print(f"[FOUND IN ATTR '{attr}'] -> {clean_val}")
-                                        found_links.add(clean_val)
-                            except Exception:
-                                continue
-
-                    # 3. Scan inside every iframe source & attributes
-                    for frame in page.frames:
-                        try:
-                            f_html = frame.content()
-                            for match in m3u8_regex.findall(f_html):
-                                clean_url = match.replace('\\', '')
-                                if clean_url not in found_links:
-                                    print(f"[FOUND IN IFRAME HTML] -> {clean_url}")
-                                    found_links.add(clean_url)
-                            
-                            for el in frame.locator("source, video, iframe, input").all():
-                                for attr in ["src", "data-src", "value"]:
-                                    val = el.get_attribute(attr)
-                                    if val and ".m3u8" in val and val not in found_links:
-                                        print(f"[FOUND IN IFRAME ATTR] -> {val}")
-                                        found_links.add(val)
-                        except Exception:
-                            continue
-
-                except Exception as e:
-                    print(f"Skipping stream target {stream_target}: {e}")
+            # Match discovered paths with your hardcoded CDN endpoints
+            stream_count = 1
+            for current_path in sorted(list(active_paths)):
+                # Exact key lookup (e.g., /mlb-streams-1)
+                if current_path in stream_map:
+                    for m3u8_endpoint in stream_map[current_path]:
+                        display_name = current_path.strip("/").replace("-", " ").title()
+                        playlist_entries.append({
+                            "name": f"{display_name} Link {stream_count}",
+                            "url": m3u8_endpoint,
+                            "id": f"roxie_{stream_count}"
+                        })
+                        stream_count += 1
+                else:
+                    # Fuzzy match fallback logic to catch variations (e.g. sports names)
+                    for static_key, endpoints in stream_map.items():
+                        clean_key = static_key.strip("/")
+                        if clean_key in current_path:
+                            for m3u8_endpoint in endpoints:
+                                display_name = current_path.strip("/").replace("-", " ").title()
+                                playlist_entries.append({
+                                    "name": f"{display_name}",
+                                    "url": m3u8_endpoint,
+                                    "id": f"roxie_{stream_count}"
+                                })
+                                stream_count += 1
+                            break
 
         except Exception as e:
-            print(f"Scraper runtime failure: {e}")
+            print(f"Execution handling error: {e}")
         finally:
             browser.close()
 
-    # --- GENERATE OUTPUT PLAYLIST ---
-    if found_links:
+    # Generate the M3U output
+    if playlist_entries:
         with open("playlist.m3u", "w") as f:
             f.write("#EXTM3U\n")
-            for idx, link in enumerate(sorted(found_links), 1):
-                stream_name = f"Roxie Stream {idx}"
-                f.write(f'#EXTINF:-1 tvg-id="roxie_{idx}" tvg-name="{stream_name}" group-title="Live Sports",{stream_name}\n')
-                f.write(f"{link}\n")
-        print(f"Successfully generated playlist.m3u with {len(found_links)} stream configurations.")
+            for entry in playlist_entries:
+                f.write(f'#EXTINF:-1 tvg-id="{entry["id"]}" tvg-name="{entry["name"]}" group-title="Live Sports",{entry["name"]}\n')
+                f.write(f"{entry['url']}\n")
+        print(f"Successfully compiled playlist.m3u with {len(playlist_entries)} mapped items.")
     else:
-        print("Run finished. 0 streaming playlist links captured.")
+        print("No matches detected on the site layout corresponding to your streaming list configurations.")
 
 if __name__ == "__main__":
     run()
