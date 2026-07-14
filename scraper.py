@@ -8,27 +8,27 @@ def run():
 
     # Your explicit mapping dictionary matching page paths directly to the underlying CDN channels
     stream_map = {
-        "/mlb-streams-1": [
+        "mlb-streams-1": [
             "https://tedesco.uniteesports.com/mlb.m3u8",
             "https://tedesco.formaturamaxi.com.br/mlb.m3u8"
         ],
-        "/nba-streams-1": [
+        "nba-streams-1": [
             "https://tedesco.uniteesports.com/nba.m3u8"
         ],
-        "/nba-streams-2": [
+        "nba-streams-2": [
             "https://tedesco.formaturamaxi.com.br/nba2.m3u8"
         ],
-        "/wwe-streams": [
+        "wwe-streams": [
             "https://admin2.formaturamaxi.com.br/wwe.m3u8"
         ],
-        "/aew": [
+        "aew": [
             "https://tedesco.formaturamaxi.com.br/aew.m3u8"
         ],
         # Predictive patterns for remaining categories based on your template configurations
-        "/soccer-streams-1": ["https://tedesco.uniteesports.com/soccer.m3u8"],
-        "/soccer-streams-2": ["https://tedesco.formaturamaxi.com.br/soccer2.m3u8"],
-        "/nfl-streams-1": ["https://tedesco.uniteesports.com/nfl.m3u8"],
-        "/nhl-streams-1": ["https://tedesco.uniteesports.com/nhl.m3u8"],
+        "soccer-streams-1": ["https://tedesco.uniteesports.com/soccer.m3u8"],
+        "soccer-streams-2": ["https://tedesco.formaturamaxi.com.br/soccer2.m3u8"],
+        "nfl-streams-1": ["https://tedesco.uniteesports.com/nfl.m3u8"],
+        "nhl-streams-1": ["https://tedesco.uniteesports.com/nhl.m3u8"],
     }
 
     with sync_playwright() as p:
@@ -77,8 +77,9 @@ def run():
                         s_href = sub_a.get_attribute("href")
                         if s_href and not any(b in s_href for b in [".cc", "guns.lol"]):
                             if any(k in s_href.lower() for k in target_keywords) or s_href.startswith("/"):
-                                path_only = s_href if s_href.startswith("/") else f"/{s_href.split('roxiestreams.info/')[-1]}"
-                                if path_only != "/" and len(path_only) > 2:
+                                # Strip leading slashes and domain roots clean to get exact string tokens
+                                path_only = s_href.split("roxiestreams.info/")[-1].strip("/")
+                                if path_only and len(path_only) > 1:
                                     active_paths.add(path_only)
                 except Exception:
                     continue
@@ -88,10 +89,10 @@ def run():
             # Match discovered paths with your hardcoded CDN endpoints
             stream_count = 1
             for current_path in sorted(list(active_paths)):
-                # Exact key lookup (e.g., /mlb-streams-1)
+                # Exact key lookup (e.g., mlb-streams-1)
                 if current_path in stream_map:
                     for m3u8_endpoint in stream_map[current_path]:
-                        display_name = current_path.strip("/").replace("-", " ").title()
+                        display_name = current_path.replace("-", " ").title()
                         playlist_entries.append({
                             "name": f"{display_name} Link {stream_count}",
                             "url": m3u8_endpoint,
@@ -99,12 +100,11 @@ def run():
                         })
                         stream_count += 1
                 else:
-                    # Fuzzy match fallback logic to catch variations (e.g. sports names)
+                    # Fuzzy match fallback logic to catch variations
                     for static_key, endpoints in stream_map.items():
-                        clean_key = static_key.strip("/")
-                        if clean_key in current_path:
+                        if static_key in current_path:
                             for m3u8_endpoint in endpoints:
-                                display_name = current_path.strip("/").replace("-", " ").title()
+                                display_name = current_path.replace("-", " ").title()
                                 playlist_entries.append({
                                     "name": f"{display_name}",
                                     "url": m3u8_endpoint,
