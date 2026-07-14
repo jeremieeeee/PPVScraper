@@ -6,8 +6,6 @@ def run():
     found_links = set()
     target_url = "https://roxiestreams.info/"
     target_keywords = ["soccer", "mlb", "nba", "nfl", "nhl", "fighting", "motorsports", "wwe", "streams", "multiview"]
-
-    # Regular expression to extract any URLs ending in .m3u8 from raw text/html
     m3u8_regex = re.compile(r'(https?://[^\s"\',\?<>#]+\.m3u8[^\s"\',<>]*)', re.IGNORECASE)
 
     with sync_playwright() as p:
@@ -18,7 +16,6 @@ def run():
         )
         page = context.new_page()
 
-        # Strategy 1: Catch .m3u8 links passing through network requests or responses
         def check_url(url):
             if ".m3u8" in url and url not in found_links:
                 print(f"[FOUND VIA NETWORK] -> {url}")
@@ -73,39 +70,53 @@ def run():
             final_stream_targets = sorted(list(match_urls))
             print(f"Deep crawl extracted {len(final_stream_targets)} individual stream paths.")
 
-            # --- TIER 3: LOAD FINAL STREAM PAGES & SCRAPE SOURCE CODE ---
+            # --- TIER 3: LOAD STREAM PAGES, CHECK DOM ATTRIBUTES & SCRIPTS ---
             for idx, stream_target in enumerate(final_stream_targets[:25]):
-                print(f"[{idx+1}/{len(final_stream_targets[:25])}] Scanning player source code at: {stream_target}")
+                print(f"[{idx+1}/{len(final_stream_targets[:25])}] Deep element check at: {stream_target}")
                 try:
                     page.goto(stream_target, wait_until="load", timeout=30000)
-                    time.sleep(6) # Wait for page elements/scripts to populate completely
+                    time.sleep(7) # Give scripts and frames time to mount
 
-                    # Strategy 2: Extract hardcoded .m3u8 links directly from the main page frame HTML
+                    # 1. Harvest from HTML source code
                     main_html = page.content()
                     for match in m3u8_regex.findall(main_html):
-                        clean_url = match.replace('\\', '') # Clean any escaped JS slashes
+                        clean_url = match.replace('\\', '')
                         if clean_url not in found_links:
-                            print(f"[FOUND IN MAIN HTML SOURCE] -> {clean_url}")
+                            print(f"[FOUND IN HTML] -> {clean_url}")
                             found_links.add(clean_url)
 
-                    # Strategy 3: Scan inside every embedded iframe source code text
+                    # 2. Harvest specific element attributes (src, data-src, data-url) across the DOM
+                    for element in page.locator("iframe, source, video, div, object, embed").all():
+                        for attr in ["src", "data-src", "data-url", "value"]:
+                            try:
+                                val = element.get_attribute(attr)
+                                if val and ".m3u8" in val:
+                                    clean_val = val.replace('\\', '')
+                                    if clean_val not in found_links:
+                                        print(f"[FOUND IN ATTR '{attr}'] -> {clean_val}")
+                                        found_links.add(clean_val)
+                            except Exception:
+                                continue
+
+                    # 3. Scan inside every iframe source & attributes
                     for frame in page.frames:
                         try:
-                            frame_html = frame.content()
-                            for match in m3u8_regex.findall(frame_html):
+                            f_html = frame.content()
+                            for match in m3u8_regex.findall(f_html):
                                 clean_url = match.replace('\\', '')
                                 if clean_url not in found_links:
-                                    print(f"[FOUND IN IFRAME HTML SOURCE] -> {clean_url}")
+                                    print(f"[FOUND IN IFRAME HTML] -> {clean_url}")
                                     found_links.add(clean_url)
                             
-                            # Backup click event to try and force dynamic initialization
-                            play_button = frame.locator("video, .play-btn, #player, .jwplayer").first
-                            if play_button and play_button.is_visible():
-                                play_button.click(timeout=1000)
+                            for el in frame.locator("source, video, iframe, input").all():
+                                for attr in ["src", "data-src", "value"]:
+                                    val = el.get_attribute(attr)
+                                    if val and ".m3u8" in val and val not in found_links:
+                                        print(f"[FOUND IN IFRAME ATTR] -> {val}")
+                                        found_links.add(val)
                         except Exception:
                             continue
 
-                    time.sleep(2) # Brief pause for any network calls forced by backup clicks
                 except Exception as e:
                     print(f"Skipping stream target {stream_target}: {e}")
 
