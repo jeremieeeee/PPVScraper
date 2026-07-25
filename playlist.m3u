@@ -33,11 +33,13 @@ https://tedesco.uniteesports.com/nhl.m3u8
 https://tedesco.uniteesports.com/soccer.m3u8
 #EXTINF:-1 tvg-id="roxie_17" tvg-name="Soccer Streams 10" group-title="Live Sports",Soccer Streams 10
 https://tedesco.uniteesports.com/soccer.m3u8
-#EXTINF:-1 tvg-id="roxie_18" tvg-name="Soccer Streams 2 Link 18" group-title="Live Sports",Soccer Streams 2 Link 18
+#EXTINF:-1 tvg-id="roxie_18" tvg-name="Soccer Streams 11" group-title="Live Sports",Soccer Streams 11
+https://tedesco.uniteesports.com/soccer.m3u8
+#EXTINF:-1 tvg-id="roxie_19" tvg-name="Soccer Streams 2 Link 19" group-title="Live Sports",Soccer Streams 2 Link 19
 https://tedesco.formaturamaxi.com.br/soccer2.m3u8
-#EXTINF:-1 tvg-id="roxie_19" tvg-name="Wnba Streams 1" group-title="Live Sports",Wnba Streams 1
+#EXTINF:-1 tvg-id="roxie_20" tvg-name="Wnba Streams 1" group-title="Live Sports",Wnba Streams 1
 https://tedesco.uniteesports.com/nba.m3u8
-#EXTINF:-1 tvg-id="roxie_20" tvg-name="Wnba Streams 2" group-title="Live Sports",Wnba Streams 2
+#EXTINF:-1 tvg-id="roxie_21" tvg-name="Wnba Streams 2" group-title="Live Sports",Wnba Streams 2
 https://tedesco.formaturamaxi.com.br/nba2.m3u8
-#EXTINF:-1 tvg-id="roxie_21" tvg-name="Wwe Streams Link 21" group-title="Live Sports",Wwe Streams Link 21
+#EXTINF:-1 tvg-id="roxie_22" tvg-name="Wwe Streams Link 22" group-title="Live Sports",Wwe Streams Link 22
 https://admin2.formaturamaxi.com.br/wwe.m3u8
